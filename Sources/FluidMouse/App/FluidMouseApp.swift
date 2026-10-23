@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showSettings() {
         if window == nil {
-            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 760),
+            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 885),
                 styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
             panel.title = "FluidMouse — rolagem suave"
             panel.isReleasedWhenClosed = false

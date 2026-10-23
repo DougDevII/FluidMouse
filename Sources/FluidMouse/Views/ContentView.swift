@@ -43,13 +43,15 @@ struct ContentView: View {
             TabView {
                 ScrollSettingsView(controller: controller)
                     .padding(12).tabItem { Text("Ajustes") }
+                ButtonSettingsView(controller: controller)
+                    .padding(12).tabItem { Text("Botões") }
                 VStack(alignment: .leading, spacing: 18) {
                     ScrollTestView()
                     Text("Compare a rodinha com o trackpad. Inverta a direção rapidamente: a animação anterior deve parar. Segure Option (⌥) para comparar com a rolagem original.")
                         .font(.callout).foregroundStyle(.secondary)
                     Spacer(minLength: 0)
                 }.padding(18).tabItem { Text("Teste de rolagem") }
-            }.frame(height: 335)
+            }.frame(height: 462)
             DisclosureGroup("Diagnóstico", isExpanded: $diagnostics) {
                 HStack(spacing: 18) {
                     Text("Rodinha: \(controller.wheelCount)")
@@ -66,7 +68,7 @@ struct ContentView: View {
         }
         .padding(24)
         }
-        .frame(width: 580, height: 760)
+        .frame(width: 580, height: 885)
         .alert("Ajuste não concluído", isPresented: Binding(get: { controller.errorMessage != nil },
             set: { if !$0 { controller.errorMessage = nil } })) {
                 Button("OK") { controller.errorMessage = nil }

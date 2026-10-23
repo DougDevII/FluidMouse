@@ -83,15 +83,33 @@ final class ScrollService {
         let gain = speed * (reverse ? -1 : 1)
         engine.add(x: dx * gain, y: dy * gain)
         wheels += 1
-        if timer == nil {
-            lastFrame = ProcessInfo.processInfo.systemUptime
-            let fps = min(120, max(60, NSScreen.main?.maximumFramesPerSecond ?? 60))
-            let frameTimer = Timer(timeInterval: 1 / Double(fps), repeats: true) { [weak self] _ in self?.advance() }
-            frameTimer.tolerance = 0.001
-            timer = frameTimer
-            RunLoop.main.add(frameTimer, forMode: .common)
-        }
+        ensureTimer()
         return nil
+    }
+
+    /// Adds an absolute scroll amount in pixels. Button actions mean the direction
+    /// they name, so user speed, direction inversion and wheel gain do not apply.
+    func injectExternalScroll(y amount: Double) {
+        let clamped = min(1_600, max(-1_600, amount))
+        guard isRunning, eventFactory.isAvailable else {
+            guard let event = eventFactory.makeEvent(x: 0, y: Int32(clamped), flags: []) else { return }
+            event.post(tap: .cgSessionEventTap)
+            frames += 1
+            return
+        }
+        anchor = NSEvent.mouseLocation
+        engine.add(x: 0, y: clamped)
+        ensureTimer()
+    }
+
+    private func ensureTimer() {
+        guard timer == nil else { return }
+        lastFrame = ProcessInfo.processInfo.systemUptime
+        let fps = min(120, max(60, NSScreen.main?.maximumFramesPerSecond ?? 60))
+        let frameTimer = Timer(timeInterval: 1 / Double(fps), repeats: true) { [weak self] _ in self?.advance() }
+        frameTimer.tolerance = 0.001
+        timer = frameTimer
+        RunLoop.main.add(frameTimer, forMode: .common)
     }
 
     private func movedAway() -> Bool {

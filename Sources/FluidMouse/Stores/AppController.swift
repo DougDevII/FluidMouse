@@ -3,10 +3,13 @@ import ApplicationServices
 import ServiceManagement
 import Combine
 import OSLog
+import FluidMouseCore
 
 final class AppController: ObservableObject {
     private let logger = Logger(subsystem: "br.com.douglas.fluido", category: "lifecycle")
-    private let service = ScrollService()
+    private let service: ScrollService
+    private let buttonService: ButtonService
+    private let devices = DeviceService()
     private let defaults = UserDefaults.standard
     private var refreshTimer: Timer?
     private var observers: [NSObjectProtocol] = []
@@ -14,6 +17,17 @@ final class AppController: ObservableObject {
     @Published var speed: Double { didSet { defaults.set(speed, forKey: "speed"); updateConfiguration() } }
     @Published var smoothness: Double { didSet { defaults.set(smoothness, forKey: "smoothness"); updateConfiguration() } }
     @Published var reverse: Bool { didSet { defaults.set(reverse, forKey: "reverse"); updateConfiguration() } }
+    /// Button number as reported by `mouseEventButtonNumber` (0 left, 1 right,
+    /// 2 middle, extras from 3) mapped to what the button does.
+    @Published var buttonMappings: [Int: ButtonAction] {
+        didSet {
+            if let data = try? JSONEncoder().encode(buttonMappings) {
+                defaults.set(data, forKey: "buttonMappings")
+            }
+            buttonService.mappings = buttonMappings
+            buttonService.refreshTap(knownTrusted: trusted)
+        }
+    }
     @Published private(set) var trusted = false
     @Published private(set) var running = false
     @Published private(set) var smoothyRunning = false
@@ -23,20 +37,36 @@ final class AppController: ObservableObject {
     @Published private(set) var frameCount = 0
     @Published private(set) var loginEnabled = false
     @Published private(set) var loginNeedsApproval = false
+    @Published private(set) var detectedDevices: [DeviceService.DeviceInfo] = []
+    /// True while the UI asks the user to press the button to be configured.
+    @Published private(set) var awaitingButtonPress = false
+    /// Button number reported by the press-to-identify flow, already consumed by the UI.
+    @Published private(set) var capturedButton: Int?
     @Published var errorMessage: String?
     var statusChanged: (() -> Void)?
     private var sleeping = false
 
     init() {
+        service = ScrollService()
+        buttonService = ButtonService(scrollService: service)
         enabled = defaults.object(forKey: "enabled") as? Bool ?? true
         let savedSpeed = defaults.object(forKey: "speed") as? Double ?? 2
         speed = savedSpeed.isFinite ? min(4, max(0.5, savedSpeed)) : 2
         let savedSmoothness = defaults.object(forKey: "smoothness") as? Double ?? 0.5
         smoothness = savedSmoothness.isFinite ? min(1, max(0, savedSmoothness)) : 0.5
         reverse = defaults.bool(forKey: "reverse")
+        if let data = defaults.data(forKey: "buttonMappings"),
+           let mappings = try? JSONDecoder().decode([Int: ButtonAction].self, from: data) {
+            buttonMappings = mappings.filter { $1 != .unchanged }
+        } else {
+            buttonMappings = [:]
+        }
+        buttonService.mappings = buttonMappings
+        devices.onChange = { [weak self] in self?.reflectDevices() }
     }
 
     func start() {
+        devices.start(); reflectDevices()
         updateConfiguration(); reconcile()
         refreshTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.reconcile() }
         let center = NSWorkspace.shared.notificationCenter
@@ -50,17 +80,17 @@ final class AppController: ObservableObject {
     }
 
     func stop() {
-        refreshTimer?.invalidate(); service.stop()
+        refreshTimer?.invalidate(); service.stop(); buttonService.stop(); devices.stop()
         observers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }; observers.removeAll()
     }
 
     func reconcile() {
         trusted = AXIsProcessTrusted()
+        buttonService.refreshTap(knownTrusted: trusted)
         smoothyRunning = NSWorkspace.shared.runningApplications.contains {
             $0.bundleURL?.lastPathComponent == "Smoothy.app" || $0.localizedName == "Smoothy"
         }
-        if enabled && trusted && !smoothyRunning && !sleeping {
-            running = service.start()
+        if enabled && trusted && !smoothyRunning && !sleeping {            running = service.start()
             status = running ? "Rolagem suave ativa" : "Não foi possível capturar a rolagem"
         } else {
             if service.isRunning { service.stop() }
@@ -105,4 +135,34 @@ final class AppController: ObservableObject {
         setLogin(true)
     }
     func reset() { speed = 2; smoothness = 0.5; reverse = false }
+    /// Removes every button mapping; each button returns to its native behavior.
+    func clearButtonMappings() { buttonMappings = [:] }
+
+    private func reflectDevices() { detectedDevices = devices.devices }
+
+    /// Press-to-identify: the UI asks the user to press the physical button.
+    func beginButtonCapture() {
+        guard !awaitingButtonPress else { return }
+        guard trusted else {
+            errorMessage = "Conceda Acessibilidade antes de identificar botões."
+            return
+        }
+        capturedButton = nil
+        awaitingButtonPress = true
+        buttonService.beginCapture { [weak self] button in
+            guard let self else { return }
+            self.awaitingButtonPress = false
+            self.capturedButton = button
+            self.buttonService.endCapture()
+        }
+    }
+
+    func cancelButtonCapture() {
+        guard awaitingButtonPress else { return }
+        awaitingButtonPress = false
+        buttonService.endCapture()
+    }
+
+    /// The view consumes the captured button number once, then clears it.
+    func clearCapturedButton() { capturedButton = nil }
 }

@@ -8,6 +8,9 @@ Utilitário nativo e gratuito de macOS que transforma os saltos da rodinha do mo
 - Rolagem vertical e horizontal.
 - Pausa pelo menu e uso temporário da rodinha sem suavização ao segurar **Option (⌥)**.
 - Inversão de direção apenas do mouse.
+- Remapeamento global dos botões: desativar, atuar como outro botão, enviar teclas com modificadores, rolar suave e acionar recursos do sistema (Mission Control, App Exposé, Launchpad, Spotlight, mídia e brilho) na aba **Botões**.
+- **Identificar botão por aperto**: a aba Botões pede que você aperte o botão físico e reconhece automaticamente qual é, antes de gravar a função.
+- Reconhecimento de mice conectados (nome, VID/PID), atualizado ao plug/desplugar.
 - Inicialização opcional ao entrar na sessão.
 - Área de teste e contadores locais de diagnóstico.
 - Processamento local, sem conta, mensalidade ou dependência do Smoothy.
@@ -32,6 +35,20 @@ open dist/FluidMouse.app
 O script gera `dist/FluidMouse.app`, cria o ícone, assina o aplicativo localmente e verifica a assinatura. Para instalar, mova o aplicativo para **Aplicativos** e abra essa cópia antes de conceder a permissão.
 
 A assinatura é **ad hoc**, voltada ao uso local. O aplicativo não tem notarização nem Apple Developer ID para distribuição pública. Recompilações podem exigir renovar a autorização em Acessibilidade.
+
+## Remapear botões (aba Botões)
+
+O fluxo de configuração: clique em **Identificar botão** (ou "(scope)" na linha desejada), **aperte o botão físico no mouse** e o FluidMouse reconhece automaticamente qual é, destacando a linha correspondente. Em seguida escolha a ação no menu da linha para gravar a função; teclas personalizadas recebem modificadores (⌘ ⌥ ⌃ ⇧) no editor expandido.
+
+O remapeamento é global: durante a identificação o próximo clique é capturado e não executa nada; cada botão (numeração do Quartz: 0 esquerdo, 1 direito, 2 do meio, extras a partir de 3) executa a ação escolhida e o evento original deixa de chegar aos aplicativos. Ações disponíveis: deixar sem alteração, desativar, clicar como outro botão, rolar suave para cima ou para baixo, tecla com modificadores e atalhos de sistema.
+
+Detalhes de funcionamento:
+
+- Um tap separado no ponto HID recebe os cliques antes da suavização e fica configurado apenas quando existe mapeamento ou captura ativa. Os demais botões passam intactos.
+- Ação de tecla oferece dois comportamentos, configuráveis por atalho no editor: **Apertar e soltar** (padrão) reproduz um toque físico de teclado, anunciando e liberando os modificadores via eventos flagsChanged — sem isso o sistema mantinha o estado atual de Command/Control (ex.: janela do ⌘Tab presa); **Ficar pressionado** mantém modificadores e tecla ativos enquanto o botão do mouse estiver segurado.
+- A ação de rolagem usa o mesmo motor de suavização da rodinha e injeta um valor absoluto (não sofre velocidade ou inversão da roda).
+- Atalhos de sistema postam as combinações padrão conhecidas: Mission Control ^↑, App Exposé ^↓, janela entre Espaços ^←/^→, área de trabalho F11, Spotlight ⌘Espaço. Atalhos personalizados nos Ajustes do Sistema não são seguidos; mídia e brilho viajam como eventos auxiliares de sistema (NX) e o brilho só muda a tela integrada.
+- Eventos sintetizados por outros aplicativos (automações) passam sem remapeamento.
 
 ## Usar
 
