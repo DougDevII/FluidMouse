@@ -5,6 +5,9 @@ import FluidMouseCore
 struct ButtonSettingsView: View {
     @ObservedObject var controller: AppController
     @State private var expandedButton: Int?
+    /// Numbers reported by press-to-identify that are not in the standard list.
+    @State private var extraButtons: Set<Int> = []
+    @State private var confirmClearAll = false
 
     /// Keycodes of the standard ANSI layout. Letters are omitted because their
     /// physical roles shift between keyboard layouts.
@@ -27,52 +30,99 @@ struct ButtonSettingsView: View {
         .command: "⌘", .option: "⌥", .control: "⌃", .shift: "⇧"
     ]
 
+    static let modifierNames: [KeystrokeModifier: String] = [
+        .command: "Command", .option: "Option", .control: "Control", .shift: "Shift"
+    ]
+
+    /// Title for a button number; numbers past the standard list continue the
+    /// "Extra" sequence (no hardware limit is assumed).
+    static func title(for number: Int) -> String {
+        if let known = buttonTitles.first(where: { $0.number == number }) { return known.title }
+        return "Extra \(number - 2)"
+    }
+
+    /// Standard buttons plus every number that has a mapping or was captured.
+    static func rowNumbers(mappings: [Int: ButtonAction], captured: Set<Int>) -> [Int] {
+        Set(buttonTitles.map(\.number)).union(mappings.keys).union(captured).sorted()
+    }
+
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                deviceHeader
-                if controller.awaitingButtonPress {
-                    HStack(spacing: 10) {
-                        Image(systemName: "scope").foregroundStyle(.teal)
-                        Text("Aperte o botão que você quer configurar no seu mouse…")
-                            .font(.callout).fontWeight(.medium)
-                        Spacer()
-                        Button("Cancelar") { controller.cancelButtonCapture() }
-                            .controlSize(.small)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Design.sectionSpacing) {
+                SectionHeader(symbol: "cursorarrow.rays",
+                              title: "Remapeamento de botões",
+                              subtitle: "Cada botão pode disparar outra ação no lugar do uso original. As funções valem para todos os mice (remapeamento global por botão).")
+                    .padding(.top, 4)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    deviceHeader
+                    if controller.awaitingButtonPress {
+                        HStack(spacing: 10) {
+                            Image(systemName: "scope").foregroundStyle(Design.accent)
+                            Text("Aperte o botão físico que você quer configurar…")
+                                .font(.callout).fontWeight(.medium)
+                            Spacer()
+                            Text("Esc")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Button("Cancelar") { controller.cancelButtonCapture() }
+                                .controlSize(.small)
+                                .keyboardShortcut(.cancelAction)
+                        }
+                        .padding(10)
+                        .background(Design.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
                     }
-                    .padding(10)
-                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-                }
-                ScrollView {
                     VStack(spacing: 4) {
-                        ForEach(Self.buttonTitles, id: \.number) { button in
-                            row(button: button.number, title: button.title)
+                        ForEach(Self.rowNumbers(mappings: controller.buttonMappings, captured: extraButtons),
+                                id: \.self) { number in
+                            row(button: number, title: Self.title(for: number))
+                        }
+                    }
+                    .disabled(controller.awaitingButtonPress)
+                    Text("Cada botão aciona a ação escolhida no lugar do seu uso original. Remapear os botões esquerdo ou direito afeta clique e arraste; use com cautela.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("Ações de sistema seguem os atalhos padrão do macOS; atalhos personalizados não são seguidos. Brilho afeta apenas a tela integrada.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Spacer()
+                        if !controller.buttonMappings.isEmpty {
+                            Button("Limpar tudo") { confirmClearAll = true }
+                                .controlSize(.small)
+                                .disabled(controller.awaitingButtonPress)
+                                .confirmationDialog("Limpar todos os remapeamentos?",
+                                                    isPresented: $confirmClearAll,
+                                                    titleVisibility: .visible) {
+                                    Button("Limpar tudo", role: .destructive) { controller.clearButtonMappings() }
+                                    Button("Cancelar", role: .cancel) {}
+                                } message: {
+                                    Text("Cada botão volta ao uso original do mouse.")
+                                }
                         }
                     }
                 }
-                .frame(maxHeight: 240)
-                Text("Cada botão aciona a ação escolhida no lugar do seu uso original. Remapear os botões esquerdo ou direito afeta clique e arraste; use com cautela.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                HStack {
-                    Spacer()
-                    if !controller.buttonMappings.isEmpty {
-                        Button("Limpar tudo") { controller.clearButtonMappings() }.controlSize(.small)
-                    }
-                }
-            }.padding(8)
+                .card()
+            }
+            .padding(20)
         }
+        .background(Color(nsColor: .windowBackgroundColor))
         .onChange(of: controller.capturedButton) { button in
             guard let button else { return }
+            extraButtons.insert(button)
             expandedButton = button
             capturedAcknowledged()
+        }
+        .onDisappear {
+            // Sair da aba não deixa a captura armada: o próximo clique do mouse
+            // seria engolido por uma tela que já não está visível.
+            if controller.awaitingButtonPress { controller.cancelButtonCapture() }
         }
     }
 
     @ViewBuilder private var deviceHeader: some View {
         HStack(spacing: 8) {
             Image(systemName: controller.detectedDevices.isEmpty ? "computermouse" : "computermouse.fill")
-                .foregroundStyle(controller.detectedDevices.isEmpty ? Color.secondary : .teal)
+                .foregroundStyle(controller.detectedDevices.isEmpty ? Color.secondary : Design.accent)
             if controller.detectedDevices.isEmpty {
                 Text("Nenhum mouse reconhecido ainda")
                     .font(.caption).foregroundStyle(.secondary)
@@ -115,6 +165,8 @@ struct ButtonSettingsView: View {
                             .font(.caption2).foregroundStyle(.secondary)
                     }.frame(width: 170, alignment: .leading)
                 }
+                .accessibilityLabel("Ação do botão \(title)")
+                .accessibilityValue(Self.summary(of: action))
                 Spacer()
                 Button {
                     controller.beginButtonCapture()
@@ -125,13 +177,14 @@ struct ButtonSettingsView: View {
                 .controlSize(.small)
                 .disabled(controller.awaitingButtonPress)
                 .help("Aperte um botão no mouse para configurá-lo aqui")
+                .accessibilityLabel("Identificar \(title) pressionando o botão físico")
             }
             if button == expandedButton, case .key(let combination)? = controller.buttonMappings[button] {
                 keyEditor(button: button, combination: combination)
             }
         }
         .padding(.vertical, 3)
-        .background(button == expandedButton ? Color.teal.opacity(0.10) : Color.clear,
+        .background(button == expandedButton ? Design.accent.opacity(0.10) : Color.clear,
                     in: RoundedRectangle(cornerRadius: 6))
     }
 
@@ -181,8 +234,10 @@ struct ButtonSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     .toggleStyle(.button)
+                    .accessibilityLabel(Self.modifierNames[modifier] ?? "")
+                    .help(Self.modifierNames[modifier] ?? "")
                 }
-                Picker("", selection: Binding(
+                Picker("Tecla", selection: Binding(
                     get: { combination.keycode },
                     set: { controller.buttonMappings[button] = .key(KeyCombination(
                         keycode: $0, modifiers: combination.modifiers,

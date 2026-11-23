@@ -13,6 +13,7 @@ let package = Package(
                              .linkedFramework("ApplicationServices"), .linkedFramework("ServiceManagement"),
                              .linkedFramework("IOKit"), .linkedFramework("CoreGraphics")]),
         .testTarget(name: "FluidMouseCoreTests", dependencies: ["FluidMouseCore"]),
-        .testTarget(name: "FluidMouseEventsTests", dependencies: ["FluidMouseEvents"])
+        .testTarget(name: "FluidMouseEventsTests", dependencies: ["FluidMouseEvents"]),
+        .testTarget(name: "FluidMouseTests", dependencies: ["FluidMouse"])
     ]
 )

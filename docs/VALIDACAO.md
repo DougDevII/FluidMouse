@@ -4,7 +4,9 @@ Versão do código: **1.0.2**.
 
 ## Cobertura automatizada
 
-Os 14 testes existentes cobrem:
+A suíte atual tem **50 testes** (41 em `FluidMouseCoreTests` e 9 em
+`FluidMouseEventsTests`): 21 são do codec do mouse Rapoo (descritos na seção
+abaixo) e os demais cobrem:
 
 - Conservação da distância nos dois eixos e distribuição entre frames.
 - Consistência a 60, 90 e 120 Hz.
@@ -17,6 +19,35 @@ Os 14 testes existentes cobrem:
 - Fonte de eventos com supressão zero e passagem dos eventos físicos.
 - Preservação da distância, modificadores e proteção contra processamento repetido.
 - Ausência de frames quando não há posição válida do cursor.
+
+## Mouse Rapoo VT9 Pro (aba Hardware)
+
+A integração com o canal de configuração do Rapoo VT9 Pro tem 21 testes de
+codec próprios (`Tests/FluidMouseCoreTests/RapooProtocolTests.swift`), com os
+frames medidos no aparelho real: frame de leitura, frame de escrita, resposta
+em bloco, resposta de bateria, ACK de escrita de 1 byte, heartbeat de 7 bytes
+do firmware atual e do gen1, escala de DPI (crua e dividida por 50), tabela de
+debounce, flags de angle snap/ripple e contagem de estágios.
+
+Verificações físicas realizadas no aparelho do usuário (Rapoo VT9 Pro, 1ª
+geração, com cabo e com receptor 2.4 GHz):
+
+- leitura de todo o mapa de registradores (`0x880`, `0x884`, `0x888`, `0x898`,
+  `0x8C0`, `0x8C4`), confirmando os valores de DPI, polling, lift-off, motion
+  sync, estágio ativo e timing;
+- escrita com read-back: alteração do estágio ativo (0 ↔ 3) e de um valor da
+  tabela de DPI (1200 → 2000 DPI), com o valor original restaurado depois;
+- leitura da bateria por duas fontes (query `0xAA` e heartbeat `0xBB`),
+  incluindo o estado de carga;
+- identificação do link em uso (cabo ou receptor 2.4 GHz) pelo byte de link do
+  heartbeat, confirmada pelo usuário;
+- verificação do comportamento do firmware: o canal de configuração só responde
+  com o mouse em movimento, e o heartbeat deixa de vir quando o mouse dorme.
+
+A descrição detalhada do protocolo, das medições e dos problemas resolvidos
+está em [Integração com o VT9 Pro](RAPOO_VT9_PRO.md),
+[Protocolo byte a byte](RAPOO_PROTOCOLO.md) e
+[Diagnóstico](RAPOO_DIAGNOSTICO.md).
 
 ## Verificações de uso
 

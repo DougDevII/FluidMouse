@@ -11,6 +11,7 @@ Utilitário nativo e gratuito de macOS que transforma os saltos da rodinha do mo
 - Remapeamento global dos botões: desativar, atuar como outro botão, enviar teclas com modificadores, rolar suave e acionar recursos do sistema (Mission Control, App Exposé, Launchpad, Spotlight, mídia e brilho) na aba **Botões**.
 - **Identificar botão por aperto**: a aba Botões pede que você aperte o botão físico e reconhece automaticamente qual é, antes de gravar a função.
 - Reconhecimento de mice conectados (nome, VID/PID), atualizado ao plug/desplugar.
+- **Configuração de hardware do mouse Rapoo VT9 Pro** na aba **Hardware**: DPI (7 estágios, X e Y), estágio ativo, polling rate (receptor 2.4 GHz e cabo), lift-off, motion sync, debounce (press/release), sleep, angle snap, ripple control, bateria e estado de carga — com painel de diagnóstico dos registradores brutos.
 - Inicialização opcional ao entrar na sessão.
 - Área de teste e contadores locais de diagnóstico.
 - Processamento local, sem conta, mensalidade ou dependência do Smoothy.
@@ -20,6 +21,7 @@ Utilitário nativo e gratuito de macOS que transforma os saltos da rodinha do mo
 - macOS 13 ou posterior.
 - Xcode ou Command Line Tools com Swift 5.9 ou posterior para compilar.
 - Permissão de Acessibilidade para interceptar e substituir os eventos da rodinha.
+- Permissão de **Monitoramento de Entrada** para configurar o hardware do mouse Rapoo (só é pedida quando há um VT9 Pro conectado).
 
 O código usa somente frameworks nativos da Apple, sem dependências de terceiros. A compilação usa a arquitetura do Mac em que é executada. Os testes de uso até esta versão foram realizados em Apple Silicon; Mac Intel e versões anteriores do macOS não foram testados fisicamente.
 
@@ -64,6 +66,33 @@ Fechar a janela mantém o aplicativo funcionando em segundo plano. Para encerrá
 
 Segure **Option (⌥)** para usar temporariamente a rodinha sem suavização. Eventos com Control ou Command também passam sem alteração, preservando ações como zoom. Shift continua disponível para rolagem horizontal.
 
+## Configurar o mouse Rapoo VT9 Pro (aba Hardware)
+
+A aba **Hardware** conversa com o mouse pelo canal de configuração do próprio
+aparelho (o mesmo usado pelo aplicativo oficial da Rapoo no Windows) e permite
+ler e gravar: estágios de DPI (X e Y), estágio ativo, polling rate do receptor
+2.4 GHz e do cabo, lift-off, motion sync, debounce de aperto e soltura, tempo de
+sleep, angle snapping, ripple control, além de bateria e estado de carga.
+
+Para usar:
+
+1. Conecte o mouse pelo cabo ou pareie o receptor 2.4 GHz.
+2. Na primeira vez, o aplicativo pede a permissão de **Monitoramento de Entrada**
+   (Ajustes do Sistema → Privacidade e Segurança). Sem ela, o macOS bloqueia o
+   acesso ao canal do mouse e o aplicativo avisa na interface.
+3. Mova o mouse: o firmware do VT9 Pro só responde comandos de configuração
+   quando o mouse está em movimento — por isso a leitura aparece e some
+   conforme o mouse dorme ou acorda.
+
+O painel **Diagnóstico** mostra os registradores brutos do aparelho (polling,
+sensor, tabela de DPI, estágio, timing e ângulo) e o identificador do device em
+uso, o que ajuda a conferir cada alteração. Detalhes técnicos, protocolo
+byte a byte e histórico de problemas resolvidos:
+
+- [Integração com o VT9 Pro](docs/RAPOO_VT9_PRO.md)
+- [Protocolo byte a byte](docs/RAPOO_PROTOCOLO.md)
+- [Diagnóstico](docs/RAPOO_DIAGNOSTICO.md)
+
 ## Funcionamento e limites
 
 O serviço intercepta eventos discretos com um event tap de CoreGraphics. A distância da rodinha é distribuída em pequenos eventos por pixel ao longo do tempo, usando decaimento exponencial e acumuladores por eixo. O temporizador de animação funciona somente enquanto há movimento pendente, com até 120 atualizações por segundo conforme a tela principal.
@@ -85,14 +114,15 @@ A pasta temporária evita metadados que alguns provedores de arquivos adicionam 
 
 | Diretório | Responsabilidade |
 | --- | --- |
-| `Sources/FluidMouseCore` | Política de entrada e motor de animação |
+| `Sources/FluidMouseCore` | Política de entrada, motor de animação e codec do mouse Rapoo (`Rapoo/`) |
 | `Sources/FluidMouseEvents` | Construção dos frames de CoreGraphics |
-| `Sources/FluidMouse/Services` | Captura, temporizador e postagem de eventos |
+| `Sources/FluidMouse/Services` | Captura, temporizador, postagem de eventos e canal do mouse (`RapooHidService`) |
 | `Sources/FluidMouse/Stores` | Preferências, permissões e ciclo de vida |
 | `Sources/FluidMouse/App` | Janela e menu da barra de menus |
-| `Sources/FluidMouse/Views` | Ajustes e área de teste |
-| `Tests` | Testes do motor e regressões dos eventos |
+| `Sources/FluidMouse/Views` | Ajustes, área de teste e aba de hardware do mouse |
+| `Tests` | Testes do motor, do codec do mouse e regressões dos eventos |
 | `Resources` | Metadados e gerador do ícone |
+| `script` | Build/empacotamento e probe ao vivo do canal do mouse |
 
 Consulte [privacidade](docs/PRIVACIDADE.md) e [validação](docs/VALIDACAO.md) para conhecer os dados utilizados e os limites dos testes.
 

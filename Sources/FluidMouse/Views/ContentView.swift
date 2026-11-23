@@ -1,78 +1,126 @@
 import SwiftUI
 
+/// Janela principal do FluidMouse: barra lateral no padrão do macOS
+/// (como Ajustes do Sistema) e o conteúdo da seção escolhida à direita.
 struct ContentView: View {
     @ObservedObject var controller: AppController
-    @State private var diagnostics = false
+    @State private var section: Section = .ajustes
 
-    var body: some View {
-        ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 14) {
-                Image(systemName: "computermouse.fill").font(.system(size: 32)).foregroundStyle(.teal)
-                    .frame(width: 62, height: 62).background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 17))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("FluidMouse").font(.system(size: 28, weight: .bold))
-                    Text("Uma rolagem mais leve para o seu mouse.").foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("GRATUITO").font(.caption.bold()).foregroundStyle(.secondary)
-            }
-            HStack {
-                Circle().fill(controller.running ? Color.green : Color.orange).frame(width: 8, height: 8)
-                Text(controller.status).fontWeight(.medium)
-                Spacer()
-                Toggle("Ativar", isOn: $controller.enabled).toggleStyle(.switch).fixedSize()
-            }.padding(12).background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+    /// Comando do menu "Ir Para" (atalhos ⌘1–4 como itens reais de menu,
+    /// expostos na barra de menus enquanto o app está ativo).
+    static let selectSectionCommand = Notification.Name("br.com.douglas.fluido.select-section")
 
-            if !controller.trusted {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "hand.raised.fill").foregroundStyle(.orange)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Permita suavizar a rolagem").fontWeight(.semibold)
-                        Text("Em Ajustes do Sistema → Privacidade e Segurança → Acessibilidade, ative o FluidMouse. A suavização começará automaticamente.")
-                            .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                        Button("Abrir Acessibilidade…") { controller.grantPermission() }.buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-            if controller.smoothyRunning {
-                Label("Encerre o Smoothy pelo menu dele para testar o FluidMouse sem interferência.", systemImage: "info.circle")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
+    enum Section: String, CaseIterable, Identifiable {
+        case ajustes, botoes, mouse, teste
 
-            TabView {
-                ScrollSettingsView(controller: controller)
-                    .padding(12).tabItem { Text("Ajustes") }
-                ButtonSettingsView(controller: controller)
-                    .padding(12).tabItem { Text("Botões") }
-                VStack(alignment: .leading, spacing: 18) {
-                    ScrollTestView()
-                    Text("Compare a rodinha com o trackpad. Inverta a direção rapidamente: a animação anterior deve parar. Segure Option (⌥) para comparar com a rolagem original.")
-                        .font(.callout).foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
-                }.padding(18).tabItem { Text("Teste de rolagem") }
-            }.frame(height: 462)
-            DisclosureGroup("Diagnóstico", isExpanded: $diagnostics) {
-                HStack(spacing: 18) {
-                    Text("Rodinha: \(controller.wheelCount)")
-                    Text("Contínuos preservados: \(controller.trackpadCount)")
-                    Text("Frames: \(controller.frameCount)")
-                }.font(.caption).monospacedDigit().foregroundStyle(.secondary).padding(.top, 6)
-            }
-            HStack {
-                Text("100% local · Sem mensalidade · Código aberto").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
-                    .font(.caption).foregroundStyle(.tertiary)
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .ajustes: return "Ajustes"
+            case .botoes: return "Botões"
+            case .mouse: return "Mouse"
+            case .teste: return "Teste"
             }
         }
-        .padding(24)
+
+        var symbol: String {
+            switch self {
+            case .ajustes: return "slider.horizontal.3"
+            case .botoes: return "cursorarrow.rays"
+            case .mouse: return "computermouse"
+            case .teste: return "waveform.path.ecg"
+            }
         }
-        .frame(width: 580, height: 885)
-        .alert("Ajuste não concluído", isPresented: Binding(get: { controller.errorMessage != nil },
-            set: { if !$0 { controller.errorMessage = nil } })) {
-                Button("OK") { controller.errorMessage = nil }
-            } message: { Text(controller.errorMessage ?? "") }
     }
 
+    var body: some View {
+        NavigationSplitView {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 196, ideal: 210, max: 240)
+        } detail: {
+            detail
+        }
+        .navigationTitle("FluidMouse")
+        .frame(minWidth: 720, minHeight: 560)
+        .onReceive(NotificationCenter.default.publisher(for: Self.selectSectionCommand)) { note in
+            guard let index = note.object as? Int,
+                  Section.allCases.indices.contains(index) else { return }
+            section = Section.allCases[index]
+        }
+    }
+
+    // MARK: Sidebar
+
+    /// Linhas soltas no `List` — uma por aba, `Label` + `tag`, no padrão
+    /// HIG "Sidebars" (um ícone, um título; badges como detalhe secundário).
+    /// A seleção vem do próprio `List` (clique é teclado ↑/↓); ⌘1–4 chegam
+    /// pelas ações de menu reais (App → "Ir Para"), que publicam
+    /// `selectSectionCommand`.
+    private var sidebar: some View {
+        List(selection: $section) {
+            ForEach(Section.allCases) { item in
+                HStack {
+                    Label(item.title, systemImage: item.symbol)
+                    Spacer(minLength: 8)
+                    badge(for: item)
+                }
+                .tag(item)
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .listStyle(.sidebar)
+    }
+
+    /// Selo na lateral: nível da bateria do mouse e estado da rolagem.
+    @ViewBuilder private func badge(for item: Section) -> some View {
+        switch item {
+        case .mouse:
+            if let percent = controller.rapooStatus?.percent {
+                StatusChip(text: "\(percent)%", symbol: nil, tint: .secondary)
+            }
+        case .ajustes:
+            if controller.enabled {
+                StatusChip(text: "ativo", symbol: "checkmark", tint: .green)
+            }
+        case .botoes:
+            if !controller.buttonMappings.isEmpty {
+                StatusChip(text: "\(controller.buttonMappings.count)", symbol: nil, tint: .secondary)
+            }
+        case .teste:
+            EmptyView()
+        }
+    }
+
+    // MARK: Detail
+
+    @ViewBuilder private var selectedView: some View {
+        switch section {
+        case .ajustes:
+            ScrollSettingsView(controller: controller)
+        case .botoes:
+            ButtonSettingsView(controller: controller)
+        case .mouse:
+            RapooHardwareView(controller: controller)
+        case .teste:
+            ScrollTestView(controller: controller)
+        }
+    }
+
+    /// Estados globais no topo de QUALQUER aba: erro (banner dispensável) e
+    /// permissão de Acessibilidade (cartão persistente até conceder). Ambos
+    /// consomem `AppController` diretamente, sem estado duplicado.
+    private var detail: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if controller.errorMessage != nil {
+                ErrorBanner(controller: controller)
+                    .padding([.horizontal, .top], 20)
+            }
+            if !controller.trusted {
+                PermissionCard(controller: controller)
+                    .padding([.horizontal, .top], 20)
+            }
+            selectedView
+        }
+    }
 }

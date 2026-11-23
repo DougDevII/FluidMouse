@@ -28,7 +28,14 @@ chmod +x "$APP_BUNDLE/Contents/MacOS/FluidMouse"
 # Remove only signing-incompatible metadata on the generated bundle.
 /usr/bin/xattr -dr com.apple.FinderInfo "$APP_BUNDLE" 2>/dev/null || true
 /usr/bin/xattr -dr com.apple.ResourceFork "$APP_BUNDLE" 2>/dev/null || true
-codesign --force --sign - --identifier br.com.douglas.fluido "$APP_BUNDLE"
+# Stable code identity: TCC (Input Monitoring) grants persist across rebuilds
+# only while the signature identity does not change. Falls back to ad-hoc.
+SIGN_IDENTITY="CE2596E1679C65C173FA5EBF72A57E34D1A71173"
+if security find-identity -p codesigning -v | grep -q "$SIGN_IDENTITY"; then
+  codesign --force --options runtime --identifier br.com.douglas.fluido --sign "$SIGN_IDENTITY" "$APP_BUNDLE"
+else
+  codesign --force --sign - --identifier br.com.douglas.fluido "$APP_BUNDLE"
+fi
 codesign --verify --strict --verbose=2 "$APP_BUNDLE"
 case "$MODE" in
   --package) echo "$APP_BUNDLE" ;;
